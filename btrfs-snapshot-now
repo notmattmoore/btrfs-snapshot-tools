@@ -1,5 +1,6 @@
 #!/bin/sh
-# create a snapshot *right now*
+# Create a snapshot *right now*.
+# Usage: btrfs-snapshot-now <path>
 # version: 2018-11-18
 
 btrfs-snapshot "$1" "" 0
