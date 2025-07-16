@@ -1,0 +1,36 @@
+# Btrfs Snapshot Tools
+
+A collection of shell scripts for creating, maintaining, and using Btrfs
+snapshots.
+
+
+### `btrfs-snapshot`
+Create up to a certain number of snapshots (by snapshot directory).
+
+Usage: `btrfs-snapshot <path> <snapshot-dir> <max-num>`. For example, 
+```
+btrfs-snapshot / hourly 100
+```
+creates a snapshot of `/` in `/_snapshots/hourly/`, removes the oldest
+snapshot in that directory if there are more than 100, and places a symlink to
+that snapshot in `/_snapshots/all/`.
+
+
+### `snapshot-recover`
+Search through the snapshots contained in `<mount_point>/_snapshots/all/` for
+different versions of the file or directory given as `$1`. Present a list of
+versions of the file prompt to copy user-specified ones to `$PWD`.
+
+Usage: `snapshot-recover <filename>`.
+
+
+### `btrfs-snapshot-chroot`
+Create a temporary snapshot of `/` and chroot into it.
+
+Usage: `btrfs-snapshot-chroot [--help] [--no-date] [--snap-name <name>]`
+
+### `btrfs-snapshot-now`
+Create a snapshot right now, give it a timestamp, and store it in
+`$mount_point/_snapshots/`.
+
+Usage: `btrfs-snapshot-now <path>`.
