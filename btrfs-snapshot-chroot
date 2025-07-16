@@ -1,0 +1,78 @@
+#!/bin/zsh
+# Create a temporary snapshot of / and chroot into it.
+# Usage: btrfs-snapshot-chroot [--help] [--no-date] [--snap-name <name>]
+# Version: 2025-05-08
+
+set -eo pipefail # exit on error, propagate failure codes through a pipeline
+
+snap_dir_default="/_snapshots"
+snap_name_default=""
+snap_name_suffix_default="$(date +'%FT%T')"
+
+usage(){ # {{{
+cat <<EOF
+btrfs-snapshot-chroot [--help|-h] [--no-date] [--snap_dir <dir>] [snapshot name]
+EOF
+} # }}}
+# parse options {{{
+snap_dir="$snap_dir_default"
+snap_name="$snap_name_default"
+snap_name_suffix="$snap_name_suffix_default"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    "--help" | "-h") usage && exit 1        ;;
+    "--snap-dir")    shift && snap_dir="$1" ;;
+    "--no-date")     snap_name_suffix=""    ;;
+    *)               snap_name="$1"         ;;
+  esac
+  shift
+done
+if [[ -n "$snap_name" &&  -n "$snap_name_suffix" ]]; then
+  snap_name_suffix="_$snap_name_suffix"
+elif [[ -z "$snap_name" && -z "$snap_name_suffix" ]]; then
+  usage && exit 1
+fi
+snap_path="$snap_dir/$snap_name$snap_name_suffix"
+#----------------------------------------------------------------------------}}}
+
+prompt_yn() { # {{{
+  # Read yes or no input, echoing back "y" or "n". If "y" or "n" is not
+  # specified, default to "y".
+  # Usage: prompt_yn <prompt> [y|Y|n|N]
+  P="$1"
+  case "$2" in
+    "" | "y" | "Y") P="$P [Y|n] " && D="y" ;;
+    "n" | "N")      P="$P [y|N] " && D="n" ;;
+    *)              echo "usage: prompt_yn <prompt> [y|Y|n|N]" >&2 && exit 1 ;;
+  esac
+  while true; do
+    read -k 1 "?$P" R
+    case "$R" in
+      "y" | "Y") echo "y"  && break  ;;
+      "n" | "N") echo "n"  && break  ;;
+      $'\n')     echo "$D" && return ;;
+      *)         echo "" >&2         ;;
+    esac
+  done
+  echo "" >&2
+} # }}}
+
+btrfs subvolume snapshot / "$snap_path"  # create the snapshot
+
+# Prompt whether to bind mount) various system paths.
+if [[ "$(prompt_yn "Bind mount /dev, /dev/pts, /proc /run, /sys?")" == "y" ]]; then
+  mount --bind {,"$snap_path"}/dev
+  mount --bind {,"$snap_path"}/dev/pts
+  mount --bind {,"$snap_path"}/proc
+  mount --bind {,"$snap_path"}/run
+  mount --bind {,"$snap_path"}/sys
+fi
+
+# chroot into the snapshot, keeping the username if run with sudo
+[[ -v SUDO_USER ]] \
+  && chroot "$snap_path" su -l "$SUDO_USER" \
+  || chroot "$snap_path"
+
+# Prompt to delete the snapshot. This umounts all the bind mounts as well.
+[[ "$(prompt_yn "Delete snapshot $snap_path?")" == "y" ]] \
+  && btrfs subvolume delete "$snap_path"

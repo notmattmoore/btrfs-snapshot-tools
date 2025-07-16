@@ -1,0 +1,36 @@
+#!/bin/sh
+# Create up to a certain number of snapshots (by snapshot directory).
+# Usage: btrfs-snapshot <path> <snapshot-dir> <max-num>
+#
+# Version: 2025-06-22
+
+if [ $# -ne 3 ]; then
+  echo "Usage: "$(basename $0)" <path> <snapshot-dir> <max-num>" >&2
+  exit 1
+fi
+
+SRC="$1"
+SNAP_DIR="$SRC/_snapshots/$2"
+MAX_SNAPS=$3
+
+create_snapshot() { # {{{
+  # create the snapshot (date stamp the name of it)
+  snap_name="$SNAP_DIR/$(date +'%FT%T')"
+  btrfs subvolume snapshot -r "$SRC" "$snap_name"
+  # link to the 'all' directory
+  ln -sr "$snap_name" "$SRC/_snapshots/all/" 2>/dev/null
+}  # }}}
+prune_snapshots() { # {{{
+  num_snaps=$(ls "$SNAP_DIR" | wc -l)
+  if [ $MAX_SNAPS -gt 0 ] && [ $num_snaps -gt $MAX_SNAPS ]; then
+    ls "$SNAP_DIR" \
+      | sort \
+      | head -n $((num_snaps - MAX_SNAPS)) \
+      | xargs -I % -d '\n' -- btrfs subvolume delete "$SNAP_DIR/%"
+  fi
+  # delete dead symlinks
+  find -L "$SRC/_snapshots/all" -maxdepth 1 -type l -delete
+}  # }}}
+
+create_snapshot
+prune_snapshots

@@ -1,0 +1,5 @@
+#!/bin/sh
+# create a snapshot *right now*
+# version: 2018-11-18
+
+btrfs-snapshot "$1" "" 0

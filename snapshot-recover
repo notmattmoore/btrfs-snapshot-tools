@@ -1,0 +1,54 @@
+#!/bin/zsh
+# Usage: snapshot-recover <filename>
+# version: 2022-03-20
+
+# find the snapshots directory
+mount_point=$(stat --format=%m "$PWD")
+snapshots_dir="$mount_point/_snapshots/all"
+
+filename=$(realpath $1)
+
+# Look for files with the same name in the snapshots. Collect snapshots with
+# distinct versions of the file.
+last="$filename"
+ls -d "$snapshots_dir"/* | sort -r | while read snap; do
+  filename_snap="$snap/$filename"
+  if [ -f "$filename_snap" ] && ! ( cmp -s "$last" "$filename_snap" ) || [ -d "$filename_snap" ]; then
+    last="$filename_snap"
+    file_snaps+=("$( basename $snap)")
+  fi
+done
+
+# Display a list of snapshots containing $filename and prompts for a snapshot to
+# restore from.
+if [ ${#file_snaps} -eq 0 ]; then
+  echo "No versions of $filename present in snapshots."
+  exit 1
+fi
+echo "Snapshots containing versions of $filename:"
+for i in $(seq ${#file_snaps}); do
+  echo "  [$i]  ${file_snaps[i]}"
+done
+read "?Restore from snapshot (or all) [default=1]: " restore_index
+[ -z "$restore_index" ] && restore_index=1
+
+# Restores the file from the file_snaps[restore_index], or create a directory to
+# hold all the versions if restore_index="all"
+if [ "$restore_index" != "all" ]; then
+  # if the file exists then don't overwrite it
+  if [ -f "$filename" ]; then
+    dest="$filename.${file_snaps[restore_index]}"
+  else
+    dest="$filename"
+  fi
+  cp -a --reflink "$snapshots_dir/${file_snaps[restore_index]}/$filename" "$dest"
+  echo "Restored to $dest."
+else
+  mkdir -p "$filename.snapshots"
+  for i in $( seq ${#file_snaps} ); do
+    filename_snap="$snapshots_dir/${file_snaps[i]}/$filename"
+    dest="$filename.snapshots/$( basename $filename ).${file_snaps[i]}"
+    cp -a --reflink "$filename_snap" "$dest"
+  done
+  echo "Restored all versions to $1.snapshots."
+fi
