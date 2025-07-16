@@ -1,0 +1,50 @@
+#!/bin/bash
+# Delete a file in a btrfs subvolume.
+# Usage: subvolume-rm [--quiet] <files>
+# Version: 2022-04-17
+
+usage() { # {{{
+cat <<EOF
+Usage: $(basename $0) [--quiet] <files>
+EOF
+}  # }}}
+subvolume_for_files() { # {{{
+  for f in "$@"; do
+    if [ -e "$f" ]; then
+      subvol=$(stat --format=%m "$f")
+      echo $subvol $f
+    else
+      >&2 echo "File not found: $f"
+    fi
+  done
+} # }}}
+
+# option parsing
+[ "$1" = "--quiet" ] && quiet=1 && shift
+[ $# -eq 0 ] && usage && exit 1
+
+# Read subvolumes and files from subvolume_for_files. We sort so that that files
+# with the same subvolume are grouped together, toggle the RO flag if needed,
+# delete them, then toggle the RO flag back (if needed). Based on the logic, we
+# will need to possible set the RO flag on the last subvolume, so a cleanup is
+# done after the loop. This requires access to the variables defined in the
+# loop, and since using pipes spawns a subshell (and hence the variables won't
+# be in scope), we use process substitution instead.
+while read subvol f; do
+  # if we are entering a new subvolume
+  if [ "$subvol" != "$subvol_prev" ]; then
+    # if the previous subvolume was changed from readonly to readwrite, then
+    # make it readonly again
+    [ "$subvol_was_ro" = "true" ] && btrfs property set -t s "$subvol_prev" ro true
+
+    subvol_prev="$subvol"
+
+    # if the current subvolume is readonly, then change it to readwrite
+    subvol_was_ro=$( btrfs property get "$subvol" ro | cut -d '=' -f 2- )
+    [ "$subvol_was_ro" = "true" ] && btrfs property set -t s "$subvol" ro false
+  fi
+  rm -rf "$f" && [ ! $quiet ] && echo "Deleted: $f"
+done < <( subvolume_for_files "$@" | sort )
+
+# cleanup: reset the readonly property on the last subvolume
+[ "$subvol_was_ro" = "true" ] && btrfs property set -t s "$subvol_prev" ro true
