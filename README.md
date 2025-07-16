@@ -24,6 +24,17 @@ versions of the file prompt to copy user-specified ones to `$PWD`.
 Usage: `snapshot-recover <filename>`.
 
 
+### `subvolume-rm`
+Delete a file in a btrfs subvolume, even if it is readonly.
+
+Usage: `subvolume-rm [--quiet] <files>`. For example,
+```
+subvolume-rm /_snapshots/all/*/home/*/some-dir
+```
+deletes the directory `some-dir` in every user's home directory in every
+snapshot.
+
+
 ### `btrfs-snapshot-chroot`
 Create a temporary snapshot of `/` and chroot into it.
 
